@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    meta.helm.sh/release-name: longhorn
+    meta.helm.sh/release-namespace: longhorn-system
+  creationTimestamp: "2025-02-13T18:33:17Z"
+  generation: 1
+  labels:
+    app.kubernetes.io/instance: longhorn
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: longhorn
+    app.kubernetes.io/version: v1.8.0
+    helm.sh/chart: longhorn-1.8.0
+  name: longhorn-driver-deployer
+  namespace: longhorn-system
+  resourceVersion: "4676"
+  uid: beed5997-3dfa-4e38-a9f4-f02b3ca07659
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: longhorn-driver-deployer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: longhorn-driver-deployer
+        app.kubernetes.io/instance: longhorn
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: longhorn
+        app.kubernetes.io/version: v1.8.0
+        helm.sh/chart: longhorn-1.8.0
+    spec:
+      containers:
+      - command:
+        - longhorn-manager
+        - -d
+        - deploy-driver
+        - --manager-image
+        - longhornio/longhorn-manager:v1.8.0
+        - --manager-url
+        - http://longhorn-backend:9500/v1
+        - --kubelet-root-dir=/var/lib/kubelet
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.serviceAccountName
+        - name: CSI_ATTACHER_IMAGE
+          value: longhornio/csi-attacher:v4.8.0
+        - name: CSI_PROVISIONER_IMAGE
+          value: longhornio/csi-provisioner:v5.1.0-20241220
+        - name: CSI_NODE_DRIVER_REGISTRAR_IMAGE
+          value: longhornio/csi-node-driver-registrar:v2.13.0
+        - name: CSI_RESIZER_IMAGE
+          value: longhornio/csi-resizer:v1.13.1
+        - name: CSI_SNAPSHOTTER_IMAGE
+          value: longhornio/csi-snapshotter:v8.2.0
+        - name: CSI_LIVENESS_PROBE_IMAGE
+          value: longhornio/livenessprobe:v2.15.0
+        image: longhornio/longhorn-manager:v1.8.0
+        imagePullPolicy: IfNotPresent
+        name: longhorn-driver-deployer
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - while [ $(curl -m 1 -s -o /dev/null -w "%{http_code}" http://longhorn-backend:9500/v1)
+          != "200" ]; do echo waiting; sleep 2; done
+        image: longhornio/longhorn-manager:v1.8.0
+        imagePullPolicy: IfNotPresent
+        name: wait-longhorn-manager
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      priorityClassName: longhorn-critical
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        runAsUser: 0
+      serviceAccount: longhorn-service-account
+      serviceAccountName: longhorn-service-account
+      terminationGracePeriodSeconds: 30
+status:
+  conditions:
+  - lastTransitionTime: "2025-02-13T18:33:17Z"
+    lastUpdateTime: "2025-02-13T18:33:52Z"
+    message: ReplicaSet "longhorn-driver-deployer-7fc7ffcb7f" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  - lastTransitionTime: "2025-02-13T18:37:04Z"
+    lastUpdateTime: "2025-02-13T18:37:04Z"
+    message: Deployment does not have minimum availability.
+    reason: MinimumReplicasUnavailable
+    status: "False"
+    type: Available
+  observedGeneration: 1
+  replicas: 1
+  unavailableReplicas: 1
+  updatedReplicas: 1
