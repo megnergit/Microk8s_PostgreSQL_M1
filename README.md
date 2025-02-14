@@ -498,17 +498,122 @@ Great!
 ## What did not work out / Mistakes
 
 1. **Ubuntu Desktop → Ubuntu Server**
-2. **Minimum requirements:**
-   - **2 vCPU**
-   - **4 GiB RAM**
-   - **20 GiB storage**
 
 Make sure you have installed **Ubuntu Server** after setting up the VM:
 
 ```sh
 lsb_release -a
 cat /etc/*release*
+dpkg -l | grep ubuntu-desktop
 ```
+
+
+2. **Minimum requirements:**
+   - **2 vCPU**
+   - **4 GiB RAM**
+   - **20 GiB storage**
+
+I started with 1 vCPU and 1 GiB RAM and microk8s was unbearably slow.  
+
+
+3. `multipass`
+... is an attractive option to start a VM but did not work out.
+
+`multipass` is offered from Canonical (=Ubuntu's official maintiner),
+and can create an ubuntu virtual machine in a simple manner.
+
+See [multipass](https://canonical.com/multipass/install).
+
+We only need to configure
+
+- `cloud-config.yaml'
+
+and execute
+
+```
+multipass launch --name micro \
+   --cloud-init cloud-config.yaml \
+   --cpus 2 \
+   --memory 4G \
+   24.04
+```
+
+Some useful commands for multipass.
+
+```
+multipass list
+multipass stop micro
+multipass delete micro
+multipass purge
+multipass networks
+multipass find
+multipass help
+
+```
+
+
+The problems are
+
+- It was not easy to set up on Mac OSX, but it worked out. [See](https://news.ycombinator.com/item?id=30265899).
+
+- `multipass` uses bridge network and at that time I did not understand that type
+of network very well.
+
+
+4. Bridge network for VMs
+
+Make sure a bridge network for VM is not similar to a bridge network
+for Kubernetes. What makes it complicated is that a bridge network
+for Kubernetes is rather similar to NAT network for VMs.
+
+Here we discuss a bridge network for VMs.
+
+With bridge network a VM is placed on the same subnet with the host.
+If you are working at home, the VM is added to your home network.
+
+This is convenient, as the connection between VM and host works in
+both direction without settings anything further (we do not need port
+forwarding like in the case of NAT network). A bridge network also enables
+communications between VMs as well. 
+
+Bridge network must be craeted on OS.
+
+[Bridge network](./images/bridge-network-1.png)
+
+However, a bridge network is also expose a VM to the home network, in
+a sense, in a naked manner. A VM is a lab for an experiment. We therefore
+decided against a bridge network.
+
+Useful commands for troubleshoot a bridge network.
+
+```
+ifconfig | grep bridge
+ifconfig bridge0
+
+ip link show bridge0
+ip route
+
+sudo ifconfig bridge0 192.168.178.1 netmask 255.255.255.0 up
+nmap -sn 192.168.X.0/24  (check what is on the network)
+
+VBoxManage list bridgedifs
+VBoxManage modifyvm "micro" --nic1 bridged --bridgeadapter1 bridge0
+VBoxManage natnetwork remove --netname "NatNetwork"
+VBoxManage dhcpserver remove --netname "bridge0"
+
+
+
+sudo ifconfig bridge0 up
+sudo ifconfig bridge0 addm en1
+sudo ifconfig bridge0 deletem en1
+sudo ifconfig bridge0 192.168.X.X netmask 255.255.255.0 up
+```
+
+
+
+
+
+
 
 ---
 
