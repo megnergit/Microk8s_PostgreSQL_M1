@@ -9,6 +9,7 @@ We aim to conduct experiments running PostgreSQL on a microk8s cluster. Our goal
 - Implementing automatic failover using Stolon.
 - Utilizing external persistent storage provided by Longhorn.
 
+---
 ## Overview
 
 1. Create a VM
@@ -16,6 +17,7 @@ We aim to conduct experiments running PostgreSQL on a microk8s cluster. Our goal
 3. Deploy Longhorn on microk8s
 4. Deploy PostgreSQL on microk8s with LoadBalancer Stolon
 5. Test failover of PostgreSQL
+
 
 ---
 
@@ -345,18 +347,6 @@ On **host** add following lines in ```.zshrc```.
 alias k="kubectl"
 ```
 
----
-# PostgreSQL on microk8s
-
-## Motivation
-
-## Overview
-
-1. Create a VM
-2. Install microk8s on the VM
-3. Deploy Longhorn on microk8s
-4. Deploy PostgreSQL on microk8s with LoadBalancer Stolon
-5. Test failover of PostgreSQL
 ---
 
 ## 3. Deploy Longhorn on microk8s
