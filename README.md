@@ -338,6 +338,7 @@ On **VM**
 sudo snap alias microk8s.kubectl k source <(k completion bash |
 sed "s/kubectl/k/g")
 ```
+[See](https://plainice.com/microk8s-bash-completion).
 
 so that we can execute ```microk8s.kubectl``` with `k` only with an
 autocompletion.
@@ -577,6 +578,7 @@ forwarding like in the case of NAT network). A bridge network also enables
 communications between VMs as well. 
 
 Bridge network must be craeted on OS.
+[See](https://support.apple.com/en-gb/guide/mac-help/mchld53dd2f5/15.0/mac/15.0)
 
 ![Bridge network](./images/bridge-network-1.png)
 
@@ -602,12 +604,17 @@ VBoxManage natnetwork remove --netname "NatNetwork"
 VBoxManage dhcpserver remove --netname "bridge0"
 
 
-
 sudo ifconfig bridge0 up
 sudo ifconfig bridge0 addm en1
 sudo ifconfig bridge0 deletem en1
 sudo ifconfig bridge0 192.168.X.X netmask 255.255.255.0 up
 ```
+
+
+5. Yet another option to start a VM is to use ova file and import an appliance.
+[See](https://documentation.ubuntu.com/public-images/en/latest/public-images-how-to/run-an-ova-using-virtualbox/).
+
+
 
 
 
