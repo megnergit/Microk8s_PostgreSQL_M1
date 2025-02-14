@@ -578,7 +578,7 @@ communications between VMs as well.
 
 Bridge network must be craeted on OS.
 
-[Bridge network](./images/bridge-network-1.png)
+![Bridge network](./images/bridge-network-1.png)
 
 However, a bridge network is also expose a VM to the home network, in
 a sense, in a naked manner. A VM is a lab for an experiment. We therefore
