@@ -5,8 +5,7 @@
 We aim to conduct experiments running PostgreSQL on a microk8s cluster. Our goals include:
 
 - Evaluating whether it is reasonable to run PostgreSQL on a microk8s cluster.
-- Setting up a high-availability configuration with one primary and two secondaries.
-- Implementing automatic failover using Stolon.
+- Setting up a high-availability configuration with one primary and two secondaries using CloudNativePG.
 - Utilizing external persistent storage provided by Longhorn.
 
 ---
@@ -15,9 +14,8 @@ We aim to conduct experiments running PostgreSQL on a microk8s cluster. Our goal
 1. Create a VM
 2. Install microk8s on the VM
 3. Deploy Longhorn on microk8s
-4. Deploy PostgreSQL on microk8s with LoadBalancer Stolon
+4. Deploy PostgreSQL on microk8s with CloudNativePG
 5. Test failover of PostgreSQL
-
 
 ---
 
@@ -30,15 +28,16 @@ We aim to conduct experiments running PostgreSQL on a microk8s cluster. Our goal
 3. Create a VM with the ISO image, setting up a user and a password.
 4. Connect the VM to the NAT network before starting it.
 5. Set up Port Forwarding before starting the VM.
-6. Start the VM.
-7. Log in to the VM and start the SSH server.
-8. Copy the SSH public key from the host to the VM using Port Forwarding.
+6. Add storage for Longhorn.
+7. Start the VM.
+8. Log in to the VM and start the SSH server.
+9. Copy the SSH public key from the host to the VM using Port Forwarding.
 
 ### Details
 
 There are a few options for creating a VM:
 
-- **VirtualBox**
+- **VirtualBox**longhorn
 
   - Bridge network
   - NAT network
@@ -121,11 +120,32 @@ These commands set up:
 - **Kubernetes API access** (enables `kubectl proxy` from the host)
 - **Kubernetes API port** (allows direct access to the microk8s API from the host)
 
-#### 6. Start the VM
+#### 6. Add storage for Longhorn.
+
+This part is optional. One can mount the Longhorn storage in the disk in which
+the operation system is stored.  We would like to, however, have a separate
+disk for Longhorn so that future expansion of the disk is easier. 
+
+Make sure VM is not yet started.
+![VM is off](./images/vm-is-off-1.png)
+
+Click on 'Storage'.
+![Click on Storage](./images/click-on-storage-1.png)
+
+Create a new hard drive.
+![Add Hard Drive](./images/add-harddrive-1.png)
+
+Let us say, 5GiB (= 1Gi for each postgres instances + margin).
+![Capacity](./images/capacity-1.png)
+
+Now we have a new disk ('micro-1.vdi). We will use it to house Longhorn volume later. 
+![New disk](./images/new-disk-1.png)
+
+#### 7. Start the VM
 
 Select the VM in VirtualBox Manager and click the **Start** button (green arrow).
 
-#### 7. Log in to the VM and start the SSH server
+#### 8. Log in to the VM and start the SSH server
 
 Log in to the VM **from the VM console** (since SSH is not yet available from the host). Use the admin account you set up.
 
@@ -151,7 +171,7 @@ Enable SSH on boot:
 sudo systemctl enable sshd
 ```
 
-#### 8. Copy the SSH public key from the host to the VM using Port Forwarding
+#### 9. Copy the SSH public key from the host to the VM using Port Forwarding
 
 On the **host**:
 
@@ -186,7 +206,6 @@ You should now be able to SSH into the VM **without a password**.
 ---
 
 ## 2. Install microk8s
-
 
 ### Tasks Overview
 
@@ -353,15 +372,135 @@ alias k="kubectl"
 ## 3. Deploy Longhorn on microk8s
 ### Tasks Overview
 
-1. Enable the Helm 3 add-on for microk8s.
-2. Deploy Longhorn using Helm.
-3. Modify the Longhorn deployment to set the `kubelet` directory.
-4. Set up `kubectl port-forward` for the Longhorn dashboard.
-5. Access the Longhorn dashboard from the host.
+1. Mount the Disk for Longhorn
+2. Enable the Helm 3 add-on for microk8s.
+3. Edit `longhorn-values.yaml`.
+4. Stop `multipath` highjacking volume. 
+5. Deploy Longhorn using Helm.
+6. Set up `kubectl port-forward` for the Longhorn dashboard.
+7. Access the Longhorn dashboard from the host.
 
 ### Details
 
-#### 1. Enable Helm 3 add-on for microk8s
+#### 1. Mount the Disk for Longhorn
+
+
+We will mount and format the disk we created
+for Longhorn. Do all the following until before the next section on **VM**.
+
+Check if we can see the disk.  
+
+```sh
+$ lsblk
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+loop0    7:0    0  63.7M  1 loop /snap/core20/2434
+loop1    7:1    0 160.4M  1 loop /snap/microk8s/7661
+loop2    7:2    0  44.4M  1 loop /snap/snapd/23545
+sda      8:0    0    25G  0 disk
+├─sda1   8:1    0     1M  0 part
+└─sda2   8:2    0    25G  0 part /
+sdb      8:16   0     5G  0 disk
+sr0     11:0    1  1024M  0 rom
+```
+
+`sdb` is the one we created for Longhorn.
+
+Create a partition. 
+```
+$ sudo fdisk /dev/sdb
+```sh
+- `m` : help
+- `p` : print
+- `n` : new
+- `l` : show all partition types (usually we need only 'Linux')
+- `w` : write (this is the most scaring one)
+
+
+Check it
+```sh
+lsblk
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+loop0    7:0    0  63.7M  1 loop /snap/core20/2434
+loop1    7:1    0 160.4M  1 loop /snap/microk8s/7661
+loop2    7:2    0  44.4M  1 loop /snap/snapd/23545
+sda      8:0    0    25G  0 disk
+├─sda1   8:1    0     1M  0 part
+└─sda2   8:2    0    25G  0 part /
+sdb      8:16   0     5G  0 disk
+└─sdb1   8:17   0     5G  0 part
+```
+Now we have `sdb1`.
+
+Format the disk.
+
+```sh
+sudo mkfs.ext4 /dev/sdb1
+mke2fs 1.47.0 (5-Feb-2023)
+Creating filesystem with 1312256 4k blocks and 328656 inodes
+...
+
+```
+
+Check if the disk `sdb1` is properly formatted. 
+
+```sh
+lsblk -f
+NAME   FSTYPE FSVER LABEL UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+loop0                                                                0   100% /snap/core20/2434
+loop1                                                                0   100% /snap/microk8s/7661
+loop2                                                                0   100% /snap/snapd/23545
+sda
+├─sda1
+└─sda2 ext4   1.0         c61fb431-4fa7-4b27-8f0e-53b62ac243df   14.8G    34% /
+sdb
+└─sdb1 ext4   1.0         
+9243................6463
+```
+
+All right. 
+
+Add to `UUID` of the partition to `/etc/fstab`.
+First we need to know UUID (can do that with `lsblk` as well).
+
+```sh
+$ sudo blkid /dev/sdb1
+/dev/sdb1: UUID="9243....6463
+```
+
+Then add it to `/etc/fstab` so that the disk will be 
+mounted automatically at every reboot. 
+
+```sh
+$ cat /etc/fstab
+# /etc/fstab: static file system information.
+...
+UUID=9243............6463 /var/lib/longhorn ext4 defaults 0 0
+```
+
+Mount the disk immediately this time
+
+```sh
+$ sudo mount -a
+
+mount: (hint) your fstab has been modified, but systemd still uses
+       the old version; use 'systemctl daemon-reload' to reload.
+```
+
+Do that as  the machine recommended.
+```sh
+$ sudo systemctl daemon-reload
+```
+
+
+Check it.
+```
+$ df -H | grep sd
+/dev/sda2        27G  9.0G   16G  36% /
+/dev/sdb1       5.3G   33k  5.0G   1% /var/lib/longhorn
+```
+All right.
+
+#### 2. Enable Helm 3 add-on for microk8s
 
 On **VM**:
 ```sh
@@ -378,19 +517,110 @@ For convenience, create an alias:
 alias helm=microk8s.helm
 ```
 
-#### 2. Deploy Longhorn using Helm
+#### 3. Edit `longhorn-values.yaml`
 
-Add the Longhorn Helm repository:
+Here  we will do two things.
+- Change the number of replication of volumes from 3 to 1. 
+- Add `kubelet` root directory. 
+
+**Longhorn replicates a persistent volume
+to different nodes for robustness. That means,
+if we would like 3 copies of a volume, we need
+at least 3 nodes. As we only have one VM, we can 
+only have one volume (=primary only).**
+
+First, add the Longhorn Helm repository:
 ```sh
 helm repo add longhorn https://charts.longhorn.io
 helm repo update
 ```
 
-Install Longhorn on the microk8s cluster:
+Pull the chart to check `values.yaml`.
+
+```
+$ helm pull longhorn/longhorn --untar
+$ cd longhorn
+$ less values.yaml
+```
+
+We will change the default 3 to 1 and save 
+it as `longhorn-values.yaml`.
+
+```yaml
+...
+persistence:
+  defaultClass: true
+  defaultFsType: "ext4"
+  defaultClassReplicaCount: 1   # <--- this one here
+...
+```
+
+Also it is critical to add `kubelet` root directory 
+in `longhorn-values.yaml`. `kubelet` root directory
+seems to be `/var/lib/kubelet` and linked to 
+`/var/snap/microk8s/common/var/lib/kubelet`, but 
+it looks like necessary to specify the latter
+(`/var/lib/kubelet` ends up `applyFsGroup` problem).
+
+```
+...
+csi:
+  # -- kubelet root directory. When unspecified, Longhorn uses the default value.
+  kubeletRootDir: "/var/snap/microk8s/common/var/lib/kubelet"
+...
+```
+
+#### 4. Stop `multipath` highjacking volume. 
+
+About the (problem)[https://longhorn.io/kb/troubleshooting-volume-with-multipath/]
+and [discussion](https://github.com/longhorn/longhorn/issues/1210#issuecomment-671591451).
+
+In short when the service `multipath` is working on the VM, the persistent volume that Longhorn created will be snatched by `multipath` and ClougNativePG cannot attach the volume to the pods it creates. 
+
+We have two ways to cope with the problem. 
+
+- Stop `multipathd` entirely, or
+- Add `/dev/sdb1` (Longhorn disk) to blacklist. 
+
+We will take the latter way. 
+
+```
+$ sudo sytemctl stop multipathd
+```
+Edit `/etc/multipath.conf` like this.
+```
+$ cat /etc/multipath.conf
+defaults {
+    user_friendly_names yes
+}
+blacklist {
+    devnode "^sd[a-z0-9]+"
+}
+```
+
+It does look we put much more disks into blacklist than necessary, but somehow `devnode "^sdb1"` did not work.
+
+Restart `multipathd`
+
+```
+$ sudo sytemctl start multipathd
+```
+
+#### 5. Deploy Longhorn using Helm
+
+Finally, install Longhorn on the microk8s cluster:
+
 ```sh
 helm install longhorn longhorn/longhorn \
+             -f longhorn-values.yaml \
              --namespace longhorn-system \
              --create-namespace
+```
+
+Check if Longhorn is running okay.
+
+```
+k get all -n longhorn-system
 ```
 
 If something goes wrong, roll back the installation:
@@ -401,6 +631,7 @@ or delete the entire namespace:
 ```sh
 kubectl delete ns longhorn-system
 ```
+but see the end of this report how to delete the Longhorn namespace clean. 
 
 To clean up the Custom Resource Definitions (CRDs):
 ```sh
@@ -418,52 +649,7 @@ microk8s stop
 microk8s start
 ```
 
-#### 3. Modify the Longhorn deployment for `kubelet` directory
-
-Check if Longhorn is running. This can also be done from the host:
-```sh
-kubectl config set-context --current --namespace longhorn-system
-kubectl get po
-```
-
-If `longhorn-driver-deployer` is not working, check the logs:
-```sh
-kubectl logs longhorn-driver-deployer-XXX
-```
-
-The `longhorn-driver-deployer` may fail to locate the `kubelet` root directory. To fix this, update the deployment.
-
-Save the configuration of `longhorn-driver-deployer`:
-```sh
-kubectl get deployments longhorn-driver-deployer -o yaml > longhorn-driver-deployer.yaml
-```
-
-Add the last line below:
-```yaml
-    spec:
-      containers:
-      - command:
-        - longhorn-manager
-        - -d
-        - deploy-driver
-        - --manager-image
-        - longhornio/longhorn-manager:v1.8.0
-        - --manager-url
-        - http://longhorn-backend:9500/v1
-        - --kubelet-root-dir=/var/lib/kubelet
-```
-
-Apply the update:
-```sh
-kubectl replace -f longhorn-driver-deployer.yaml --force
-```
-
-Check if `longhorn-driver-deployer` is now running:
-```sh
-kubectl get po
-```
-
-#### 4. Set up `kubectl port-forward` for the Longhorn dashboard
+#### 6. Set up `kubectl port-forward` for the Longhorn dashboard
 
 To access the Longhorn dashboard from the host, set up port forwarding.
 Execute the following command on either the **host** or **VM**:
@@ -473,7 +659,7 @@ kubectl port-forward -n longhorn-system service/longhorn-frontend 8080:80
 
 This forwards port 80 of the `longhorn-frontend` service (inside the `longhorn-system` namespace) to port 8080 on the host.
 
-#### 5. Access the Longhorn dashboard from the host
+#### 7. Access the Longhorn dashboard from the host
 
 Open the following URL in a web browser on the **host**:
 ```sh
@@ -488,11 +674,234 @@ Great!
 
 ---
 
-## 4. Deploy PostgreSQL on microk8s with LoadBalancer Stolon
+## 4. Deploy PostgreSQL on microk8s with CloudNativePG
+
+### Tasks Overview
+
+1. Install CloudNativePG using `helm`.
+2. Edit `cnpg-values.yaml`.
+3. Edit `postgers-cluster.yaml`.
+4. Start a postgres cluster.
+
+### Details
+
+#### 1. Install CloudNativePG using `helm`.
+
+It is not that we install postgreSQL and add failover function with CloudNativePG (cnpg), but the other way around. 
+
+We will first install the failover frame work CloudNativePG, and add postgreSQL cluster to it. 
+CloudNativePG not only takes care  of automatic failover but also schedules backup, exporter for Prometheus and much more. 
+
+Check [the document](https://cloudnative-pg.io/documentation/1.25/quickstart/).
+
+Add cnpg repo. 
+
+```
+helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm repo update
+help repo list
+```
+
+#### 2. Edit `cnpg-values.yaml`.
+
+It seems, one can set an indentical parameter in `*values.yaml` and cluster configuration file `postgres-cluster.yaml` that we will create. In order to avoid confusion, we edited `cnpg-values.yaml' like this.
+
+```yaml
+cloudnative-pg:
+  clusterName: pg-cluster
+#  instances: 2  # 1x primary + 1x secondary
+#  instances: 3  # 1x primary + 2x secondary
+#  storage:
+#    size: 1Gi
+#    storageClass: longhorn  # use longhorn
+#  volumeAttributes:
+#    numberOfReplicas: 1
+#  volumeResizing: true
+  postgresql:
+    version: "15"
+    parameters:
+      shared_buffers: "256MB"
+      max_connections: "100"
+  securityContext:
+    fsGroup: 0
+  superuserSecret:
+    name: pg-superuser-secret
+  backup:
+    enabled: false
+
+```
+
+Then start cnpg with helm.
+
+```sh
+helm install cnpg cnpg/cloudnative-pg \
+       -f cnpg-values.yaml \
+       --namespace postgres-cluster \
+       --create-namespace
+```
+
+
+Check it.
+```
+k get all -n postgres-cluster
+``` 
+
+
+#### 3. Edit `postgers-cluster.yaml`.
+
+We are looking at 3 instance cluster, one primary, and two secondary. Therefore the number of instances we will create is 3.  
+
+```
+$ cat postgres-cluster.yaml
+# Example of PostgreSQL cluster
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-ha
+  namespace: postgres-cluster
+
+spec:
+  instances: 3
+
+  storage:
+    size: 1Gi
+    storageClass: longhorn
+
+  superuserSecret:
+    name: pg-superuser-secret
+
+  replicationSlots:
+    highAvailability:
+      enabled: true
+
+  primaryUpdateMethod: switchover
+```
+
+#### 4. Start a postgres cluster.
+
+Now we are ready to start postgres cluster. 
+
+
+```
+k create -f postgres-cluster.yaml
+```
+
+
+Check it.
+```
+k get po -n postgres-cluster -w
+```
+
+Check if three volumes (one volume for each instance)
+are created on Longhorn. 
+
+![Three volumes are created](./images/longhorn-volumes-1.png)
+
+It is not that 3 postgres instances (one primary and two secondaries) share one storage, but each of them has its own storage. When failover happens, a secondary takes over the storage of the primary. 
 
 ## 5. Test failover of PostgreSQL
 
 ### Tasks Overview
+
+1. Check if we can get into postgres.
+2. Check which one is the primary.
+3. Test if the cluster really does a failover
+
+### Details
+
+#### 1. Check if we can get into postgres.
+
+Let us get into the context with the namespace `postgres-cluster` to save typing. 
+
+```
+k config set-context --current --namespace postgres-cluster
+```
+
+We have 3 instances in high-availability formation. 
+
+```
+$ k get po 
+NAME                                   READY   STATUS    RESTARTS   AGE
+cnpg-cloudnative-pg-6f9846bd9d-q9qfd   1/1     Running   0          8m59s
+postgres-ha-1                          1/1     Running   0          7m23s
+postgres-ha-2                          1/1     Running   0          6m38s
+postgres-ha-3                          1/1     Running   0          6m
+```
+
+Get into `postgres-ha-1`.
+```
+kubectl exec -it postgres-ha-1 --  sh
+Defaulted container "postgres" out of: postgres, bootstrap-controller (init)
+$ psql
+psql (17.2 (Debian 17.2-1.pgdg110+1))
+Type "help" for help.
+```
+
+All right. 
+
+#### 2. Check which one is the primary.
+
+Let us check which one is the primary.
+
+``` 
+kubectl exec -it postgres-ha-1 -- psql -U postgres -c "SELECT * FROM pg_stat_replication;"
+
+```
+We should see the content of `pg_stat_replication`, which is a table to show which secondaries the primary knows. 
+
+```
+kubectl exec -it postgres-ha-2 -- psql -U postgres -c "SELECT * FROM pg_stat_replication;"
+```
+
+The view should be empty, because `postgres-ha-2` is a secondary. 
+
+Same for `postgers-ha-3`.
+
+```
+kubectl exec -it postgres-ha-3 -- psql -U postgres -c "SELECT * FROM pg_stat_replication;"
+```
+
+#### 2. Test if the cluster really does a failover
+
+Then delete `postgers-ha-1`.
+
+```
+$ k delete po postgres-ha-1
+pod "postgres-ha-1" deleted
+```
+
+It will comes back soon, as it a part of a deployment, 
+
+```
+$ k get po
+NAME                                   READY   STATUS    RESTARTS   AGE
+cnpg-cloudnative-pg-6f9846bd9d-q9qfd   1/1     Running   0          16m
+postgres-ha-1                          1/1     Running   0          29s
+postgres-ha-2                          1/1     Running   0          13m
+postgres-ha-3                          1/1     Running   0          13m
+```
+
+but  `postgers-ha-2` or `postgers-ha-3` should have already taken over primary's job while `postgers-ha-1` is absent. 
+
+
+```
+kubectl exec -it postgres-ha-2 -- psql -U postgres -c "SELECT * FROM pg_stat_replication;"
+```
+
+Empty.
+
+```
+kubectl exec -it postgres-ha-3 -- psql -U postgres -c "SELECT * FROM pg_stat_replication;"
+```
+Filled. It was `postgers-ha-3` that takes over the primary. 
+
+```
+kubectl exec -it postgres-ha-1 -- psql -U postgres -c "SELECT * FROM pg_stat_replication;"
+```
+
+Empty. 
+
+All right. 
 
 ---
 
@@ -615,14 +1024,56 @@ sudo ifconfig bridge0 192.168.X.X netmask 255.255.255.0 up
 [See](https://documentation.ubuntu.com/public-images/en/latest/public-images-how-to/run-an-ova-using-virtualbox/).
 
 
+6. Choice of loadbalaner/automatic failover for PostgresSQL.
 
+See this blog
+[for choices](https://blog.palark.com/comparing-kubernetes-operators-for-postgresql/).
 
+See tis blog for [CloudNativePG](https://blog.palark.com/cloudnativepg-and-other-kubernetes-operators-for-postgresql/).
 
+7. How to uninstall Longhorn clean. 
 
+It was not easy. We ended up removing whole namespace
+`longhorn-system`, but that was not easy either.
+Follow these steps. The problem was `Finalizer` and webhooks that would allow us just to delete the resources 
+in a simple manner. 
+
+i. Make sure finalizers would not remain.
+
+```
+kubectl delete -n longhorn-system volumes.longhorn.io --all
+kubectl delete -n longhorn-system nodes.longhorn.io --all
+kubectl delete -n longhorn-system replicas.longhorn.io --all
+kubectl delete -n longhorn-system engines.longhorn.io --all
+kubectl delete -n longhorn-system instanceManagers.longhorn.io --all
+kubectl delete -n longhorn-system backingImages.longhorn.io --all
+kubectl delete -n longhorn-system backups.longhorn.io --all
+kubectl delete -n longhorn-system settings.longhorn.io --all
+```
+
+ii. Delete webhooks. 
+```
+kubectl delete validatingwebhookconfiguration longhorn-admission-webhook
+kubectl delete mutatingwebhookconfiguration longhorn-webhook-mutator
+
+```
+
+iii. Delete namespace.
+```
+ kubectl delete ns longhorn-system
+```
+
+ iv. When the process before hangs, remove finalizer.
+```
+kubectl get ns longhorn-system -o json | jq '.spec.finalizers=[]' | kubectl replace -\
+-raw "/api/v1/namespaces/longhorn-system/finalize" -f -
+
+```
 
 
 
 ---
+
 
 # END
 

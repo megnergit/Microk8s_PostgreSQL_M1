@@ -1,0 +1,46 @@
+csi:
+  # -- kubelet root directory. When unspecified, Longhorn uses the default value.
+  kubeletRootDir: "/var/snap/microk8s/common/var/lib/kubelet"
+
+defaultSettings:
+  defaultReplicaCount: 1 # default number of replica for Longhorn
+  defaultDataPath: "/var/lib/longhorn" # where the data of Longhorn will be stored
+  backupTarget: "" # backup target (e.g.: s3://my-bucket@region)
+  defaultLonghornStaticPodFilesystemPath: "/var/snap/microk8s/common/var/lib/kubelet"
+  #  kubeletRootDir: "/var/snap/microk8s/common/var/lib/kubelet"  # root-dir for kubelet
+#  kubeletRootDir: "/var/lib/kubelet" # root-dir for kubelet
+
+persistence:
+  defaultClass: true
+  defaultFsType: "ext4"
+  defaultClassReplicaCount: 1
+
+ingress:
+  enabled: false # when we use Ingress, set to 'true'
+  host: "longhorn.example.com"
+
+service:
+  ui:
+    type: ClusterIP
+    port: 80
+
+longhornManager:
+  tolerations: []
+  nodeSelector: {}
+
+longhornDriver:
+  tolerations: []
+  nodeSelector: {}
+
+longhornUI:
+  enabled: true
+  replicas: 1
+
+# default StorageClass
+storageClass:
+  defaultClass: true
+  reclaimPolicy: Delete
+  allowVolumeExpansion: true
+  parameters:
+    numberOfReplicas: "1" # this must be kept when Helm release is upgraded
+

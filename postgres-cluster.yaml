@@ -1,0 +1,23 @@
+# Example of PostgreSQL cluster
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-ha
+  namespace: postgres-cluster
+
+spec:
+  instances: 3
+
+  storage:
+    size: 1Gi
+    storageClass: longhorn
+
+  superuserSecret:
+    name: pg-superuser-secret
+
+  replicationSlots:
+    highAvailability:
+      enabled: true
+
+  primaryUpdateMethod: switchover
+

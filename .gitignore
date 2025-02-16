@@ -1,15 +1,21 @@
-# 🌐 OS / IDE の不要なファイル
+# Usual ones.
+POSTGRESQL_MICROK8S
+*~
+.*~
+README
+tmp/
+longhorn/
+
+# 🌐 unnecessary files from OS / IDE 
 .DS_Store
 Thumbs.db
 *.swp
 .vscode/
 .idea/
 *.iml
-*~
-.*~
 
 
-# 🛠️ ローカル環境・ログ
+# 🛠️  local logs / environments
 logs/
 *.log
 npm-debug.log*
@@ -18,7 +24,7 @@ yarn-error.log*
 pip-log.txt
 pip-delete-this-directory.txt
 
-# 📦 Python 仮想環境・依存関係
+# 📦 Python dependency and virtual environment
 venv/
 __pycache__/
 *.pyc
@@ -91,6 +97,6 @@ service-account.json
 _site/
 node_modules/
 
-# 🗑️ キャッシュファイル
+# 🗑️  cache
 *.cache
 *.bak

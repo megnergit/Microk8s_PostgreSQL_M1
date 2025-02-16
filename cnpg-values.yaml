@@ -1,0 +1,21 @@
+cloudnative-pg:
+  clusterName: pg-cluster
+#  instances: 2  # 1x primary + 1x secondary
+#  instances: 3  # 1x primary + 2x secondary
+#  storage:
+#    size: 1Gi
+#    storageClass: longhorn  # use longhorn
+#  volumeAttributes:
+#    numberOfReplicas: 1  
+#  volumeResizing: true
+  postgresql:
+    version: "15"
+    parameters:
+      shared_buffers: "256MB"
+      max_connections: "100"
+  securityContext:
+    fsGroup: 0
+  superuserSecret:
+    name: pg-superuser-secret
+  backup:
+    enabled: false
