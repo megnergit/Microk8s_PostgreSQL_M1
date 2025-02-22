@@ -23,15 +23,14 @@ We aim to conduct experiments running PostgreSQL on a microk8s cluster. Our goal
 
 ### Tasks Overview
 
-1. Create a NAT network on VirtualBox.
-2. Download an ISO image.
-3. Create a VM with the ISO image, setting up a user and a password.
-4. Connect the VM to the NAT network before starting it.
-5. Set up Port Forwarding before starting the VM.
-6. Add storage for Longhorn.
-7. Start the VM.
-8. Log in to the VM and start the SSH server.
-9. Copy the SSH public key from the host to the VM using Port Forwarding.
+
+1. Download an ISO image.
+2. Create a VM with the ISO image, setting up a user and a password.
+3. Set up Port Forwarding before starting the VM.
+4. Add storage for Longhorn.
+5. Start the VM.
+6. Log in to the VM and start the SSH server.
+7. Copy the SSH public key from the host to the VM using Port Forwarding.
 
 ### Details
 
@@ -41,29 +40,22 @@ There are a few options for creating a VM:
 
   - Bridge network
   - NAT network
+  - NAT
 
 - **Multipass** (Canonical, Ubuntu official)
 
-  - NAT network
+  - NAT
 
-We chose VirtualBox with NAT network. After trying all of the above, we found that **VirtualBox + NAT** was the most reasonable setup.
-
-#### 1. Create a NAT network on VirtualBox
-
-Open VirtualBox Manager (UI). Go to `Tools` (left column) → `NAT Networks` → `Create` (`+` button).
-
-![Create NAT network](./images/nat-network-1.png)
-
-A NAT network named **"NatNetwork"** with the default subnet **10.0.2.0/24** will be created.
-
-![Create NAT network](./images/nat-network-2.png)
+We chose VirtualBox with NAT (make sure 'NAT' and 'Nat network' are
+different options). After trying all of the above, we found that
+**VirtualBox + NAT** was the most reasonable setup.
 
 
-#### 2. Download an ISO image
+#### 1. Download an ISO image
 
 Download an ISO image from the [Ubuntu website](https://jp.ubuntu.com/download). Make sure to download **Ubuntu Server**, not the Desktop version.
 
-#### 3. Create a VM with the ISO image, setting up a user and a password
+#### 2. Create a VM with the ISO image, setting up a user and a password
 
 Go to `Machine` from VirtualBox Manager and choose `New`.
 
@@ -86,25 +78,8 @@ Set up:
   - **25 GiB storage**
 ![vCPUs and memory](./images/cpu-1.png)
 
-#### 4. Connect the VM to the NAT network before starting
 
-Before starting the VM, connect its virtual NIC to the NAT network.
-
-![Connect VM to NAT network](./images/NIC-1.png)
-
-
-|               | NAT network | Host-only network | Bridge network |
-| ------------- | ----------- | ----------------- | -------------- |
-| VM → Internet | ✅           | ❌                 | ✅              |
-| VM → Host     | ✅           | ✅                 | ✅              |
-| VM → VM       | ❌           | ❌                 | ✅              |
-| Host → VM     | ❌           | ❌                 | ✅              |
-
-We initially tried the **bridge network**, but abandoned it (see **What did not work out** at the end of this document).
-
-Since `host → VM` communication is not available in a NAT network, we need to set up **Port Forwarding** next.
-
-#### 5. Set up Port Forwarding before starting the VM
+#### 3. Set up Port Forwarding before starting the VM
 
 Use the VirtualBox CLI on the **host** terminal:
 
@@ -120,7 +95,7 @@ These commands set up:
 - **Kubernetes API access** (enables `kubectl proxy` from the host)
 - **Kubernetes API port** (allows direct access to the microk8s API from the host)
 
-#### 6. Add storage for Longhorn.
+#### 4. Add storage for Longhorn.
 
 This part is optional. One can mount the Longhorn storage in the disk in which
 the operation system is stored.  We would like to, however, have a separate
@@ -141,11 +116,11 @@ Let us say, 5GiB (= 1Gi for each postgres instances + margin).
 Now we have a new disk ('micro-1.vdi). We will use it to house Longhorn volume later. 
 ![New disk](./images/new-disk-1.png)
 
-#### 7. Start the VM
+#### 5. Start the VM
 
 Select the VM in VirtualBox Manager and click the **Start** button (green arrow).
 
-#### 8. Log in to the VM and start the SSH server
+#### 6. Log in to the VM and start the SSH server
 
 Log in to the VM **from the VM console** (since SSH is not yet available from the host). Use the admin account you set up.
 
@@ -171,7 +146,7 @@ Enable SSH on boot:
 sudo systemctl enable sshd
 ```
 
-#### 9. Copy the SSH public key from the host to the VM using Port Forwarding
+#### 7. Copy the SSH public key from the host to the VM using Port Forwarding
 
 On the **host**:
 
